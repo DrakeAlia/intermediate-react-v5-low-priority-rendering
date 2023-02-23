@@ -1,10 +1,15 @@
-import { useContext, useState } from "react";
+import { useContext, useState, useDeferredValue, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Results from "./Results";
 import AdoptedPetContext from "./AdoptedPetContext";
 import useBreedList from "./useBreedList";
 import fetchSearch from "./fetchSearch";
 const ANIMALS = ["bird", "cat", "dog", "rabbit", "reptile"];
+
+// Right now the biggest re-render in app is when our app gets a new batch of pets to render. Imagine if 
+// we had three hundred pets to render: that actually could take a while. And if in the mean time a user clicked a 
+// button to adopt a pet or re-search for something else, we'd want to drop rendering other pets and focus 
+// on what the user asked for. 
 
 const SearchParams = () => {
   const [requestParams, setRequestParams] = useState({
@@ -18,6 +23,15 @@ const SearchParams = () => {
 
   const results = useQuery(["search", requestParams], fetchSearch);
   const pets = results?.data?.pets ?? [];
+  // if we get new pets from the API ^^, it's ok to interrupt re-rendering results
+  // useDeferredValue takes in a value and gives you a cached version of it: that cached version may be current or it may 
+  // be a stale one as it works through a re-render. Evenutally it will be the current one
+  const deferredPets = useDeferredValue(pets)
+  // useMemo - only update this, if this value here changes [deferredPets]
+  const renderedPets = useMemo(
+    () => <Results pets={deferredPets} />,
+    [deferredPets]
+  )
 
   return (
     <div className="search-params">
@@ -78,9 +92,12 @@ const SearchParams = () => {
 
         <button>Submit</button>
       </form>
-      <Results pets={pets} />
+      {renderedPets}
     </div>
   );
 };
+
+// The idea here is you have some part of your app that when it re-renders it causes 
+// jank in other parts of your app and it can be slowed down a bit without issue. useDeferredValue is exactly for that.
 
 export default SearchParams;
